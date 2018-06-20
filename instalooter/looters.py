@@ -9,6 +9,7 @@ import atexit
 import copy
 import functools
 import random
+import re
 import threading
 import time
 import typing
@@ -22,8 +23,8 @@ from six.moves.queue import Queue
 from six.moves.http_cookiejar import FileCookieJar, LWPCookieJar
 
 from . import __author__, __name__ as __appname__, __version__
-from ._impl import length_hint
-from ._utils import NameGenerator, CachedClassProperty
+from ._impl import length_hint, json
+from ._utils import NameGenerator, CachedClassProperty, get_shared_data
 from .medias import TimedMediasIterator, MediasIterator
 from .pages import ProfileIterator, HashtagIterator
 from .pbar import ProgressBar
@@ -88,6 +89,7 @@ class InstaLooter(object):
 
         """
         session = session or Session()
+        # Load cookies
         session.cookies = LWPCookieJar(
             cls._cachefs.getsyspath(cls._COOKIE_FILE))
         try:
@@ -120,6 +122,10 @@ class InstaLooter(object):
 
         try:
             session.headers.update({
+                'Accept-Encoding': 'gzip, deflate',
+                'Accept-Language': 'en-US,en;q=0.8',
+                'Connection': 'keep-alive',
+                'Content-Length': '0',
                 'Host': 'www.instagram.com',
                 'Origin': 'https://www.instagram.com',
                 'Referer': 'https://www.instagram.com',
@@ -129,14 +135,14 @@ class InstaLooter(object):
             })
 
             with session.get(homepage) as res:
-                token = res.cookies['csrftoken']
+                token = get_shared_data(res.text)['config']['csrf_token']
                 session.headers.update({'X-CSRFToken': token})
-            time.sleep(5 * random.random()) # nosec
+            time.sleep(5 * random.random())  # nosec
 
             with session.post(login_url, data, allow_redirects=True) as login:
-                token = login.cookies['csrftoken']
+                token = get_shared_data(login.text)['config']['csrf_token']
                 session.headers.update({'X-CSRFToken': token})
-                time.sleep(5 * random.random()) # nosec
+                time.sleep(5 * random.random())  # nosec
                 if not login.status_code == 200:
                     raise SystemError("Login error: check your connection")
 
@@ -259,6 +265,16 @@ class InstaLooter(object):
         self.session = self._init_session(session)
         atexit.register(self.session.close)
 
+        # Set a fake User-Agent
+        if self.session.headers['User-Agent'].startswith('python-requests'):
+            self.session.headers['User-Agent'] = self._user_agents.firefox
+
+        # Get CSRFToken and RHX
+        with self.session.get('https://www.instagram.com/') as res:
+            token = get_shared_data(res.text)['config']['csrf_token']
+            self.session.headers['X-CSRFToken'] = token
+            self.rhx = get_shared_data(res.text)['rhx_gis']
+
     @abc.abstractmethod
     def pages(self):
         # type: () -> Iterator[Dict[Text, Any]]
@@ -315,9 +331,10 @@ class InstaLooter(object):
             dict: a media dictionaries, in the format used by Instagram.
 
         """
-        url = "https://www.instagram.com/p/{}/?__a=1".format(code)
+        url = "https://www.instagram.com/p/{}/".format(code)
         with self.session.get(url) as res:
-            return res.json()['graphql']['shortcode_media']
+            data = get_shared_data(res.text)
+            return data['entry_data']['PostPage'][0]['graphql']['shortcode_media']
 
     def download_pictures(self,
                           destination,       # type: Union[str, fs.base.FS]
@@ -538,7 +555,7 @@ class InstaLooter(object):
                           queue,            # type: Queue
                           destination,      # type: fs.base.FS
                           medias_iter,      # type: Iterable[Any]
-                          media_count=None, # type: Optional[int]
+                          media_count=None,  # type: Optional[int]
                           new_only=False,   # type: bool
                           condition=None,   # type: Optional[Callable[[dict], bool]]
                           ):
@@ -658,7 +675,7 @@ class ProfileLooter(InstaLooter):
     """A looter targeting medias on a user profile.
     """
 
-    def __init__(self, username,  **kwargs):
+    def __init__(self, username, **kwargs):
         # type: (str, **Any) -> None
         """Create a new profile looter.
 
@@ -691,7 +708,7 @@ class ProfileLooter(InstaLooter):
             it = ProfileIterator.from_username(self._username, self.session)
             self._owner_id = it.owner_id
             return it
-        return ProfileIterator(self._owner_id, self.session)
+        return ProfileIterator(self._owner_id, self.session, self.rhx)
 
 
 class HashtagLooter(InstaLooter):
@@ -714,7 +731,7 @@ class HashtagLooter(InstaLooter):
 
     def pages(self):  # noqa: D102
         # type: () -> HashtagIterator
-        return HashtagIterator(self._hashtag, self.session)
+        return HashtagIterator(self._hashtag, self.session, self.rhx)
 
 
 class PostLooter(InstaLooter):
