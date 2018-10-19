@@ -9,6 +9,45 @@ project adheres to `Semantic Versioning <http://semver.org/spec/v2.0.0.html>`_.
 Unreleased_
 -----------
 
+v2.3.0_ - 2018-09-05
+--------------------
+
+Changed
+'''''''
+- Bumped required ``tenacity`` version to ``5.0``.
+
+v2.2.0_ - 2018-08-19
+--------------------
+
+Changed
+'''''''
+- Bumped required ``fs`` version to ``2.1.0``.
+
+
+v2.1.0_ - 2018-07-31
+--------------------
+
+Added
+'''''
+- Posts can now be downloaded by giving directly the post URL (implement #184).
+
+Fixed
+'''''
+- Batch will now log the name of the current account as well as occuring
+  errors (fix #185)
+- CLI login will now properly display logger messages.
+- Library loggers do not have a `logging.StreamHandler` set by default
+  anymore.
+- Attempt fixing login procedure in ``InstaLooter._login``.
+
+Changed
+'''''''
+- Trying to download media from an non-existing user will display a nicer
+  message: ``user not found: '...'`` (fix #194).
+- Batch mode will now continue to the next job if any error occurs, showing
+  an error message instead of crashing (fix #185).
+
+
 v2.0.3_ - 2018-05-29
 --------------------
 
@@ -86,7 +125,10 @@ Removed
 - ``hues`` dependency, replaced by ``coloredlogs``
 - ``BeautifulSoup4`` dependency
 
-.. _Unreleased: https://github.com/althonos/InstaLooter/compare/v2.0.3...HEAD
+.. _Unreleased: https://github.com/althonos/InstaLooter/compare/v2.3.0...HEAD
+.. _v2.3.0: https://github.com/althonos/InstaLooter/compare/v2.2.0...v2.3.0
+.. _v2.2.0: https://github.com/althonos/InstaLooter/compare/v2.1.0...v2.2.0
+.. _v2.1.0: https://github.com/althonos/InstaLooter/compare/v2.0.3...v2.1.0
 .. _v2.0.3: https://github.com/althonos/InstaLooter/compare/v2.0.2...v2.0.3
 .. _v2.0.2: https://github.com/althonos/InstaLooter/compare/v2.0.1...v2.0.2
 .. _v2.0.1: https://github.com/althonos/InstaLooter/compare/v2.0.0...v2.0.1

@@ -16,7 +16,7 @@ import requests
 import six
 
 from instalooter._impl import length_hint, piexif, PIL
-from instalooter.batch import BatchRunner
+from instalooter.batch import BatchRunner, logger as batch_logger
 from instalooter.cli import main
 from instalooter.looters import HashtagLooter, ProfileLooter, PostLooter
 
@@ -109,7 +109,7 @@ class TestResolvedIssues(unittest.TestCase):
         for f in self.destfs.scandir("/"):
             self.assertTrue(f.name.startswith('nintendo.'))
 
-    @unittest.skipIf(os.getenv("CI") is None, "need private user account")
+    @unittest.skipIf(os.getenv("IG_USERNAME") is None, "need private user account")
     def test_issue_006(self):
         """
         Checks that instalooter does not iterate forever on a private
@@ -360,6 +360,48 @@ class TestResolvedIssues(unittest.TestCase):
             {'instagram': 'D:\\Instagram\\Profiles\\instagram',
              'therock': 'D:\\Instagram\\Profiles\\therock'}
         )
+
+    @mock.patch('instalooter.looters.InstaLooter.__init__')
+    def test_issue_184(self, _):
+        """Feature request by @ghost.
+
+        Allow downloading a post directly from its URL.
+        """
+        looter = PostLooter("https://www.instagram.com/p/BJlIB9WhdRn/?taken-by=2k")
+        self.assertEqual(looter.code, "BJlIB9WhdRn")
+
+    def test_issue_185(self):
+        """Feature request by @JPNYC81.
+
+        Make sure an ``instalooter`` batch keeps even if it encounters errors
+        on a specific job. This test tries with an non-existing profile.
+        """
+        configfile = six.StringIO(textwrap.dedent(
+            """
+            [Family]
+            num-to-dl = 3
+            users =
+                jdskjhjkfhkdshfkjdhsfjsfdkjhfksdjhf: {tmp}
+            	instagram: {tmp}
+            	therock: {tmp}
+            """
+        ).format(tmp=self.tmpdir))
+        runner = BatchRunner(configfile)
+        with mock.patch('instalooter.batch.logger'):
+            runner.run_all()
+        self.assertGreaterEqual(len(self.destfs.listdir('/')), 6)
+
+    def test_issue_194(self):
+        """Feature request by @raphaelbernardino
+
+        When trying to download from an non-existing user, try to display a
+        meaningful message instead of a cryptic error.
+        """
+        username = "jdhfdjkhdlqdhfdhqfqjqlhfhdsdjquryerhdjfhqlkdfhkqhfqkure"
+        looter = ProfileLooter(username)
+        with self.assertRaises(ValueError) as ctx:
+            media = next(looter.medias())
+        self.assertEqual(str(ctx.exception), "user not found: '{}'".format(username))
 
 
 # @mock.patch('instalooter.looter.requests.Session', lambda: TestPullRequests.session)
